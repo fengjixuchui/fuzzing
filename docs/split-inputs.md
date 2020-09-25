@@ -121,7 +121,7 @@ of separators.
 
 ## Fuzzed Data Provider
 
-[FuzzedDataProvider] is a single-header C++ library that is helpful for
+[FuzzedDataProvider] (*FDP*) is a single-header C++ library that is helpful for
 splitting a fuzz input into multiple parts of various types. It is a part of
 LLVM and can be included via `#include <fuzzer/FuzzedDataProvider.h>` directive.
 If your compiler doesn't have this header (in case it's an older Clang version
@@ -136,8 +136,24 @@ and split the fuzz input into several parts, the corpus elements will no longer
 be valid image files, and you won't be able to simply add image files to your
 corpus.
 
-[FuzzedDataProvider] is a class whose constructor accepts `const uint8_t*,
-size_t` arguments. Below is a quick overview of the available methods.
+### Main concepts
+
+* [FuzzedDataProvider] is a class whose constructor accepts `const uint8_t*,
+  size_t` arguments. Usually, you would call it in the beginning of your
+  `LLVMFuzzerTestOneInput` and pass the `data, size` parameters provided by the
+  fuzzing engine.
+* Once an FDP object is constructed using the fuzz input, you can consume the
+  data from the input by calling the FDP methods listed below.
+* If there is not enough data left to consume, FDP will consume all the
+  remaining bytes. For example, if you call `ConsumeBytes(10)` when there are
+  only `4` bytes left in the fuzz input, FDP will return a vector of length `4`.
+* If there is no data left, FDP will return the default value for the requested
+  type or an empty container (when consuming a sequence of bytes).
+* If you consume data from FDP in a loop, make sure to check the value returned
+  by `remaining_bytes()` between loop iterations.
+* Do not use the methods that return `std::string` unless your API requires a
+  string object or a C-style string with a trailing null byte. This is a common
+  mistake that hides off-by-one buffer overflows from AddressSanitizer.
 
 ### Methods for extracting individual values
 
@@ -158,18 +174,25 @@ cases.
 
 ### Methods for extracting sequences of bytes
 
+Many of these methods have a length argument. You can always know how many bytes
+are left inside the provider object by calling `remaining_bytes()` method on it.
+
 * `ConsumeBytes` and `ConsumeBytesWithTerminator` methods return a `std::vector`
   of the requested size. These methods are helpful when you know how long a
-  certain part of the fuzz input should be.
+  certain part of the fuzz input should be. Use `.data()` and `.size()` methods
+  of the resulting object if your API works with raw memory arguments.
 * `ConsumeBytesAsString` method returns a `std::string` of the requested length.
   This is useful when you need a null-terminated C-string. Calling `c_str()` on
   the resulting object is the best way to obtain it.
 * `ConsumeRandomLengthString` method returns a `std::string` as well, but its
   length is derived from the fuzz input and typically is hard to predict, though
-  always deterministic. The caller must provide the max length argument.
+  always deterministic. The caller can provide the max length argument.
 * `ConsumeRemainingBytes` and `ConsumeRemainingBytesAsString` methods return
   `std::vector` and `std::string` objects respectively, initialized with all the
   bytes from the fuzz input that left unused.
+* `ConsumeData` method copies the requested number of bytes from the fuzz input
+  to the given pointer (`void *destination`). The method is useful when you need
+  to fill an existing buffer or object (e.g. a struct) with fuzzing data.
 
 For more information about the methods, their arguments and implementation
 details, please refer to the [FuzzedDataProvider] source code. Every method has
@@ -204,10 +227,10 @@ to split your fuzzer-generated input for the following reasons:
   will break the TLV structure too often, making fuzzing less efficient
 
 However, a TLV input combined with a custom mutator might be a good option.
-See [Structure-Aware Fuzzing](https://github.com/google/fuzzer-test-suite/blob/master/tutorial/structure-aware-fuzzing.md).
+See [Structure-Aware Fuzzing](structure-aware-fuzzing.md).
 
 ## Protobufs
 
 Yet another option is to use one of the general-purpose serialization formats,
 such as Protobufs, in combination with a custom mutator.
-See [Structure-Aware Fuzzing](https://github.com/google/fuzzer-test-suite/blob/master/tutorial/structure-aware-fuzzing.md).
+See [Structure-Aware Fuzzing](structure-aware-fuzzing.md).
